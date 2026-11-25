@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
-import { openDatabase } from "../src/db/database.mjs";
+import { openDatabase, SCHEMA_VERSION } from "../src/db/database.mjs";
 import { MigrationError } from "../src/errors.mjs";
 import { initializeDataDirectory } from "../src/storage.mjs";
 import { fakeClock } from "../test-support/fake-clock.mjs";
@@ -44,7 +44,7 @@ test("migration creates the data layout and survives restart without reapplying"
   const reopened = openDatabase(initializeDataDirectory(dataDir), clock.now);
   try {
     const versions = reopened.prepare("SELECT version, applied_at FROM schema_version").all();
-    assert.equal(versions.length, 1);
+    assert.equal(versions.length, SCHEMA_VERSION);
     assert.equal(versions[0].version, 1);
     assert.equal(versions[0].applied_at, appliedAt);
     assert.equal(reopened.prepare("SELECT dsm_username FROM users").get().dsm_username, "owner");
@@ -95,7 +95,7 @@ test("a failed migration rolls back its schema and version record together", (t)
 test("a newer schema version is rejected without changing its history", (t) => {
   const path = join(makeDataDir(t), "newer.sqlite");
   const database = openDatabase(path);
-  database.exec("INSERT INTO schema_version VALUES (2, '2026-01-01')");
+  database.prepare("INSERT INTO schema_version VALUES (?, '2026-01-01')").run(SCHEMA_VERSION + 1);
   database.close();
 
   assert.throws(() => openDatabase(path), {
@@ -104,7 +104,7 @@ test("a newer schema version is rejected without changing its history", (t) => {
   });
   const inspected = new DatabaseSync(path);
   try {
-    assert.equal(inspected.prepare("SELECT max(version) AS version FROM schema_version").get().version, 2);
+    assert.equal(inspected.prepare("SELECT max(version) AS version FROM schema_version").get().version, SCHEMA_VERSION + 1);
   } finally {
     inspected.close();
   }
