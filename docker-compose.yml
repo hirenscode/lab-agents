@@ -1,0 +1,13 @@
+# For Synology Container Manager: Project -> Create, point it at the folder holding this file and .env
+services:
+  lab-agents:
+    image: ghcr.io/theatomiclabs/lab-agents:${TAG:-latest}
+    container_name: lab-agents
+    ports:
+      - "8787:8787"                      # fixed host port (no random ports)
+    volumes:
+      - /volume1/docker/lab-agents:/data # change if your Docker share is elsewhere
+    user: "${PUID:-1000}:${PGID:-1000}"  # a NAS user that can write to the folder above
+    environment:
+      - NODE_ENV=production
+    restart: unless-stopped
