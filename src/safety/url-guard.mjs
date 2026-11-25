@@ -42,6 +42,11 @@ function domain(value) {
   return hostname.toLowerCase();
 }
 
+export function normalizeAllowedDomains(values) {
+  if (!Array.isArray(values) || values.length === 0) throw deny("A hostname allow-list is required");
+  return [...new Set(values.map(domain))];
+}
+
 function parseUrl(value, allowed, previous) {
   if (typeof value !== "string" || value.trim() === "") throw deny("Expected a URL");
 
@@ -144,8 +149,7 @@ export function createUrlGuard({
   }
 
   return async function fetchAllowed(input, { allowedDomains, signal: callerSignal } = {}) {
-    if (!Array.isArray(allowedDomains) || allowedDomains.length === 0) throw deny("A hostname allow-list is required");
-    const allowed = new Set(allowedDomains.map(domain));
+    const allowed = new Set(normalizeAllowedDomains(allowedDomains));
     const timeout = AbortSignal.timeout(timeoutMs);
     const signal = callerSignal ? AbortSignal.any([callerSignal, timeout]) : timeout;
     let url = parseUrl(input, allowed);
