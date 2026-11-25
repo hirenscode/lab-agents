@@ -61,7 +61,11 @@ export function installApi(app, services, config, now) {
     };
     route("GET", "/tools", (_req, _reply, { database, user, tools }) =>
       database.prepare("SELECT * FROM tool_instances WHERE owner_id=? ORDER BY id").all(user.id)
-        .map((row) => ({ id: row.id, ...tools.instance({ ...row, scope: JSON.parse(row.scope_json) }) })));
+        .map(({ id, type, name, permission, scope_json }) => {
+          const config = { id, type, name, permission, scope: JSON.parse(scope_json) };
+          try { return { id, ...tools.instance(config) }; }
+          catch { return { ...config, description: "Scope needs review" }; }
+        }));
     route("POST", "/tools", (req, reply, { database, user, tools }) => {
       const saved = tools.instance(req.body);
       const result = database.prepare("INSERT INTO tool_instances(owner_id,type,name,scope_json,permission,created_at) VALUES(?,?,?,?,?,?)")

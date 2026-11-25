@@ -3,14 +3,23 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=22.13.0" },
+  "engines": {
+    "node": ">=22.13.0"
+  },
   "scripts": {
     "start": "node src/server.mjs",
     "dev": "node --watch src/server.mjs",
     "test": "node --test",
-    "admin:create": "node src/auth/admin-cli.mjs"
+    "admin:create": "node src/auth/admin-cli.mjs",
+    "build": "vite build",
+    "dev:ui": "vite"
   },
   "dependencies": {
     "fastify": "^5.0.0"
+  },
+  "devDependencies": {
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "vite": "7.3.8"
   }
 }

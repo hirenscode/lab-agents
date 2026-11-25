@@ -4,6 +4,7 @@ import { loadConfig } from "./config.mjs";
 import { openDatabase } from "./db/database.mjs";
 import { installApi } from "./api/routes.mjs";
 import { openServices } from "./services.mjs";
+import { serveConsole } from "./ui.mjs";
 import { dataDirWritable, initializeDataDirectory } from "./storage.mjs";
 
 const page = (version, writable) => {
@@ -16,7 +17,7 @@ const page = (version, writable) => {
 <p class="${writable ? "ok" : "bad"}">Data folder: ${writable ? "writable" : "NOT writable (check the PUID/PGID settings)"}</p></body></html>`;
 };
 
-export function buildServer({ config = loadConfig(), now = () => new Date(), brainClientFactory } = {}) {
+export function buildServer({ config = loadConfig(), now = () => new Date(), brainClientFactory, uiDirectory } = {}) {
   const app = Fastify({ logger: config.nodeEnv !== "test" });
   let database;
   let services;
@@ -51,9 +52,11 @@ export function buildServer({ config = loadConfig(), now = () => new Date(), bra
     });
   });
 
-  app.get("/", async (_request, reply) => reply
-    .type("text/html")
-    .send(page(config.version, dataDirWritable(config.dataDir))));
+  if (!serveConsole(app, uiDirectory)) {
+    app.get("/", async (_request, reply) => reply
+      .type("text/html")
+      .send(page(config.version, dataDirWritable(config.dataDir))));
+  }
 
   return app;
 }

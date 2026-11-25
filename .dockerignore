@@ -5,3 +5,5 @@ data
 .github
 test
 *.md
+
+dist

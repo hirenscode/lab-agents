@@ -1,6 +1,6 @@
 # lab-agents
 
-Spawnable, killable agents for a home NAS, with a Hexagon-style web console. **Phase 0 = the pipeline**: a tiny app that proves build, push, pull and run work on your Synology before any agent logic exists.
+Spawnable, killable agents for a home NAS, with a React console built from Hexagon components. The app runs the agent engine and stores its data on the NAS while a local Ollama endpoint supplies the model.
 
 Image: `ghcr.io/theatomiclabs/lab-agents` (private first). Port: `8787`.
 
@@ -32,17 +32,17 @@ sudo chown YOUR_NAS_USER /volume1/docker/lab-agents
 ## 3. Run it (Container Manager)
 1. Put `docker-compose.yml` and a `.env` (copy `.env.example`, set `PUID`/`PGID`, optionally `TAG=0.1.0`) in a folder such as `/volume1/docker/lab-agents-project`.
 2. Container Manager -> **Project** -> **Create**, set that path, then build and start.
-3. Open `http://<NAS-IP>:8787`. You should see the version and **Data folder: writable**.
+3. Open `http://<NAS-IP>:8787` for the console. Open `/healthz` to check app storage and the running build.
 4. If the firewall is on, allow TCP 8787 from your LAN.
 
 ## Notes
 - The image is built for `linux/amd64` (your DS920+). To run it on your Apple Silicon Mac, build locally with `docker build -t lab-agents .`.
 - GHCR image names must be lowercase. If your GitHub org has capital letters, use the lowercase form in `docker-compose.yml`.
 - Update the NAS: tag a new version (`v0.1.1`), set `TAG` in `.env`, then rebuild the project.
-- Local dev uses Node 22.13 or later. Run `npm ci` then `npm run dev`, or run `npm test` to check the foundation. See [Phase 1](docs/phase-1.md) for storage and verification details.
+- Local dev uses Node 22.13 or later. Run `npm ci`, `npm run build`, and `npm start`. Open `http://127.0.0.1:8787/` and sign in with DSM or a provisioned local administrator. See [authentication setup](docs/phase-6.md) and the [console guide](docs/phase-10.md).
 
 ## Decisions so far
-- **Login (Phase 2):** DSM accounts through DSM's login API, behind a swappable auth interface, with a local SQLite admin as a fallback. Needs a plan for 2-step verification.
+- **Login (Phase 6):** DSM accounts with two-step verification support and a local SQLite administrator fallback.
 - **Registry:** GitHub Container Registry, private first.
-- **UI (Phase 3):** React, using the Hexagon component library.
+- **UI (Phase 10):** React, using the Hexagon component library.
 - **Database:** SQLite, from Phase 1.

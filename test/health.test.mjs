@@ -14,7 +14,7 @@ function fixture(t, { version, blocked = false } = {}) {
   if (blocked) writeFileSync(dataDir, "Not a directory");
   const config = loadConfig({ NODE_ENV: "test", DATA_DIR: dataDir, APP_VERSION: version });
   const clock = fakeClock();
-  const app = buildServer({ config, now: clock.now });
+  const app = buildServer({ config, now: clock.now, uiDirectory: null });
   t.after(async () => {
     try {
       await app.close();
