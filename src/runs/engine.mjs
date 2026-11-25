@@ -108,12 +108,17 @@ export function createRunEngine(database, {
             webDerived: checkpoint.webDerived === true,
             emit: (progress) => { signal.throwIfAborted(); event(runId, "progress", progress); },
           }, signal);
-        } catch {
+        } catch (error) {
           signal.throwIfAborted();
+          if (config.type === "weather" && error instanceof SafetyError
+              && ["weather_location", "weather_unavailable"].includes(error.code)) {
+            result = { error: error.message };
+          }
         }
       }
       signal.throwIfAborted();
-      if (config?.type === "web_fetch" && result?.source === "web") checkpoint.webDerived = true;
+      if (result?.source === "web") checkpoint.webDerived = true;
+      if (config?.type === "weather" && result?.source === "web") event(runId, "weather_data");
       checkpoint.elapsedMs = elapsed();
       checkpoint.callIndex++;
       if (result?.proposal) {

@@ -4,6 +4,10 @@ import { activeStates, completedStates, formatDate, runLabels } from "./model.mj
 
 function eventText(event) {
   const payload = event.payload;
+  if (event.kind === "weather_data") return <>
+    Weather by <a href="https://open-meteo.com/" target="_blank" rel="noreferrer">Open-Meteo</a>
+    {" · Location data by "}<a href="https://www.geonames.org/" target="_blank" rel="noreferrer">GeoNames</a>
+  </>;
   if (event.kind === "delta") return payload.text;
   if (event.kind === "tool_call") return payload.tool;
   if (event.kind === "progress") return [payload.phase, `${payload.scanned ?? 0} scanned`,
@@ -86,7 +90,7 @@ export function RunView({ id, api, data, refresh }) {
         {shown.length ? <ol className="log-list" aria-label="Run events">
           {shown.map((event) => <li key={event.id}>
             <time dateTime={event.ts}>{new Date(event.ts).toLocaleTimeString()}</time>
-            <strong>{runLabels[event.kind] ?? event.kind.replaceAll("_", " ")}</strong>
+            <strong>{runLabels[event.kind] ?? (event.kind === "weather_data" ? "Weather source" : event.kind.replaceAll("_", " "))}</strong>
             <span>{eventText(event)}</span>
           </li>)}
         </ol> : <Empty title="Waiting for events">The run log will appear here.</Empty>}

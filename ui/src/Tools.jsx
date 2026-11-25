@@ -63,7 +63,7 @@ export function ToolLibrary({ api, data, refresh, selection = [], onUse, onBack,
               {type.permission === "propose" ? "Needs approval" : "Read only"}
             </Status></div>
           <h3>{label}</h3><p>{description}</p>
-          <div className="tool-footer"><small>{config ? group === "Web" ? "Allowed hostnames" : "Allowed folder" : "Static"}</small>
+          <div className="tool-footer"><small>{type.id === "weather" ? "Open-Meteo only" : config ? group === "Web" ? "Allowed hostnames" : "Allowed folder" : "Static"}</small>
             <Button disabled={busy || attached} onClick={() => start(type)}>{attached ? "Added" : config ? "Set up" : onUse ? "Add to agent" : "Save setup"}</Button></div>
         </Card>;
       })}</div> : <Card><Empty title="No matching tool types">Try a different search or category.</Empty></Card>}

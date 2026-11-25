@@ -5,6 +5,7 @@ import { prepareQuarantineProposal } from "../safety/quarantine.mjs";
 import { createUrlGuard, normalizeAllowedDomains } from "../safety/url-guard.mjs";
 import { openScopedFile, scanCandidates } from "./files.mjs";
 import { verifyDuplicatePair } from "../duplicates/scan.mjs";
+import { lookupWeather, weatherArgsSchema } from "./weather.mjs";
 
 const string = { type: "string", minLength: 1 };
 const object = (properties = {}, required = Object.keys(properties)) => ({
@@ -13,6 +14,7 @@ const object = (properties = {}, required = Object.keys(properties)) => ({
 const mountScope = object({ mountId: string, folder: { type: "string" } }, ["mountId"]);
 const fileArg = object({ path: string });
 const moverScope = object({ ...mountScope.properties, requireDuplicate: { type: "boolean" } }, ["mountId"]);
+const webTools = new Set(["web_fetch", "weather"]);
 const fileDescription = (scope) => `${scope.mountId}/${scope.folder || ""}`;
 
 function invalid(message) {
@@ -22,7 +24,11 @@ function invalid(message) {
 function validate(value, schema) {
   if (schema.type === "boolean") return typeof value === "boolean";
   if (schema.type === "string") {
-    return typeof value === "string" && value.length >= (schema.minLength ?? 0) && value.length <= 4096;
+    return typeof value === "string" && value.length >= (schema.minLength ?? 0)
+      && value.length <= (schema.maxLength ?? 4096) && (!schema.enum || schema.enum.includes(value));
+  }
+  if (schema.type === "integer") {
+    return Number.isSafeInteger(value) && value >= schema.minimum && value <= schema.maximum;
   }
   if (schema.type === "array") {
     return Array.isArray(value) && value.length >= schema.minItems && value.length <= 64
@@ -81,6 +87,14 @@ export function createToolRegistry({ pathGuard, dataDir, fetchAllowed = createUr
       async run({ url }, { scope }, signal) {
         const response = await fetchAllowed(url, { allowedDomains: scope.allowedDomains, signal });
         return { status: response.statusCode, text: response.body.toString("utf8", 0, 4000), source: "web" };
+      },
+    },
+    {
+      id: "weather", permission: "read", scopeSchema: object(), argsSchema: weatherArgsSchema,
+      describe: () => "Get current weather and up to seven daily forecasts for a city or postal code. " +
+        "Use only the location requested and add a region to disambiguate. Reads weather and geocoding from Open-Meteo.",
+      run(args, _ctx, signal) {
+        return lookupWeather(args, fetchAllowed, signal);
       },
     },
     {
@@ -162,7 +176,7 @@ export function createToolRegistry({ pathGuard, dataDir, fetchAllowed = createUr
 
 export function assertToolMix(instances) {
   if (instances.length > 8) throw invalid("An agent can use at most eight tools");
-  if (instances.some(({ type }) => type === "web_fetch")
+  if (instances.some(({ type }) => webTools.has(type))
       && instances.some(({ permission, type }) => permission !== "read" && type !== "personality_proposal")) {
     throw invalid("An agent cannot combine web access with file-changing tools");
   }

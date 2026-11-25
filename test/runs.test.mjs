@@ -120,3 +120,21 @@ test("stored approval gates file movement and resumes the model afterward", asyn
   await state(id, "done");
   assert.match(observed[1].at(-1).content, /approved/);
 });
+
+test("weather results mark later tool calls as web-derived and emit an attribution event", async (t) => {
+  const provenance = [];
+  const { engine, state } = fixture(t, {
+    type: "weather",
+    script: (_input, step) => step === 1
+      ? answer("", [call(12, { location: "Portland" }), call(12, { location: "Paris" })])
+      : answer("Forecast ready"),
+    async toolOverride(_config, _args, context) {
+      provenance.push(context.webDerived);
+      return { source: "web", forecast: [] };
+    },
+  });
+  const { id } = engine.spawn(1, 10);
+  await state(id, "done");
+  assert.deepEqual(provenance, [false, true]);
+  assert.equal(engine.events(1, id).filter(({ kind }) => kind === "weather_data").length, 2);
+});

@@ -10,6 +10,7 @@ export const typeInfo = {
   datetime: ["DateTime", "System", "Current date and time in a time zone."],
   disk_status: ["Disk Status", "System", "Free and total space on the app's data volume."],
   file_reader: ["File Reader", "Files", "Reads text files within an allowed folder."],
+  weather: ["Weather", "Web", "Current conditions and up to seven days of forecasts by city or postal code."],
   web_fetch: ["Web Fetch", "Web", "Reads pages on the hostnames you allow."],
   dup_finder: ["Duplicate Finder", "Files", "Finds byte-identical files and reports scan progress."],
   file_mover: ["File Mover", "Files", "Proposes a move to quarantine for your approval."],

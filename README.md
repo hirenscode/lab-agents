@@ -39,6 +39,7 @@ sudo chown YOUR_NAS_USER /volume1/docker/lab-agents
 - The image is built for `linux/amd64` (your DS920+). To run it on your Apple Silicon Mac, build locally with `docker build -t lab-agents .`.
 - GHCR image names must be lowercase. If your GitHub org has capital letters, use the lowercase form in `docker-compose.yml`.
 - Update the NAS: tag a new version (`v0.1.1`), set `TAG` in `.env`, then rebuild the project.
+- Weather is available in the Tools library. See [the Weather tool guide](docs/weather.md).
 - Local dev uses Node 22.13 or later. Run `npm ci`, `npm run build`, and `npm start`. Open `http://127.0.0.1:8787/` and sign in with DSM or a provisioned local administrator. See [authentication setup](docs/phase-6.md) and the [console guide](docs/phase-10.md).
 
 ## Decisions so far
