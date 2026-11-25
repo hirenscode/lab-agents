@@ -7,6 +7,7 @@ import { ConfigError } from "./errors.mjs";
 import { createRunEngine } from "./runs/engine.mjs";
 import { createPathGuard } from "./safety/path-guard.mjs";
 import { createToolRegistry } from "./tools/registry.mjs";
+import { createTriggerService } from "./triggers/service.mjs";
 
 function inside(root, path) {
   const offset = relative(root, path);
@@ -32,10 +33,16 @@ export function openServices(database, config, { now, brainClientFactory }) {
     dsm: createDsmAuth(config.dsmUrl), adminUsers: config.adminUsers, secure: config.secureCookies, now,
   });
   const engine = createRunEngine(database, { pathGuard, tools, brains, now });
+  const triggers = createTriggerService(database, {
+    engine, pathGuard, now,
+    available: (agent) => brains.list().some((brain) => brain.enabled && brain.online && brain.models.length &&
+      (!agent.brain_pref || agent.config.ifUnavailable === "fallback" || brain.id === agent.brain_pref)),
+  });
   engine.start();
-  brains.start(() => engine.resumeWaiting());
+  triggers.start();
+  brains.start(async () => { engine.resumeWaiting(); await triggers.tick(); });
   return {
-    database, pathGuard, tools, brains, sessions, engine,
-    async close() { await Promise.all([brains.close(), engine.close()]); },
+    database, pathGuard, tools, brains, sessions, engine, triggers,
+    async close() { await Promise.all([triggers.close(), brains.close(), engine.close()]); },
   };
 }

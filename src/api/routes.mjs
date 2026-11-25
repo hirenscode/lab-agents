@@ -94,6 +94,16 @@ export function installApi(app, services, config, now) {
       agents.archive(user.id, identifier(req.params.id));
       return reply.code(204).send();
     });
+    route("GET", "/agents/:id/triggers", (req, _reply, { triggers, user }) =>
+      triggers.list(user.id, identifier(req.params.id)));
+    route("POST", "/agents/:id/triggers", (req, reply, { triggers, user }) =>
+      reply.code(201).send(triggers.save(user.id, identifier(req.params.id), req.body)));
+    route("PUT", "/agents/:id/triggers/:triggerId", (req, _reply, { triggers, user }) =>
+      triggers.save(user.id, identifier(req.params.id), req.body, identifier(req.params.triggerId)));
+    route("DELETE", "/agents/:id/triggers/:triggerId", (req, reply, { triggers, user }) => {
+      triggers.remove(user.id, identifier(req.params.id), identifier(req.params.triggerId));
+      return reply.code(204).send();
+    });
     route("POST", "/agents/:id/runs", (req, reply, { engine, user }) =>
       reply.code(201).send(engine.spawn(user.id, identifier(req.params.id), req.body?.task)));
     route("GET", "/runs", (req, _reply, { engine, user }) =>

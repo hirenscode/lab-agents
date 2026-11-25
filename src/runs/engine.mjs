@@ -267,15 +267,15 @@ export function createRunEngine(database, {
         : database.prepare("SELECT id FROM runs WHERE owner_id=? AND agent_id=? ORDER BY id DESC LIMIT 100").all(userId, agentId);
       return rows.map(({ id }) => get(userId, id));
     },
-    spawn(userId, agentId, task) {
+    spawn(userId, agentId, task, { triggerId = null, occurrence = null, defer = false } = {}) {
       const agent = agentWithTools(database, userId, agentId);
       const prompt = task ?? agent.config.task;
       if (typeof prompt !== "string" || !prompt.trim() || prompt.length > 4000) reject("invalid_run", "Enter a task up to 4,000 characters");
-      const row = database.prepare("INSERT INTO runs(agent_id,owner_id,task,created_at) VALUES(?,?,?,?)")
-        .run(agentId, userId, prompt.trim(), time());
+      const row = database.prepare("INSERT INTO runs(agent_id,owner_id,task,created_at,trigger_id,occurrence) VALUES(?,?,?,?,?,?)")
+        .run(agentId, userId, prompt.trim(), time(), triggerId, occurrence);
       const id = Number(row.lastInsertRowid);
       event(id, "queued");
-      kick(id);
+      if (!defer) kick(id);
       return get(userId, id);
     },
     kill(userId, id) {
