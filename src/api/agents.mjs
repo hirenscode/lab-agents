@@ -21,7 +21,7 @@ export function text(value, limit, label, optional = false) {
 
 export function createAgentStore(database, brains, now) {
   const get = (owner, id) => agentWithTools(database, owner, id);
-  function save(ownerId, input, id) {
+  function save(ownerId, input, id, { transaction = true } = {}) {
     if (!input || typeof input !== "object") bad("Enter an agent");
     if (id !== undefined) get(ownerId, id);
     const name = text(input.name, 80, "name");
@@ -41,7 +41,7 @@ export function createAgentStore(database, brains, now) {
     if (tools.some((tool) => !tool)) bad("Select tool instances you own");
     assertToolMix(tools);
 
-    database.exec("BEGIN IMMEDIATE");
+    if (transaction) database.exec("BEGIN IMMEDIATE");
     try {
       if (id === undefined) {
         id = Number(database.prepare("INSERT INTO agents(owner_id,name,brain_pref,config_json,created_at) VALUES(?,?,?,?,?)")
@@ -53,8 +53,8 @@ export function createAgentStore(database, brains, now) {
       }
       const attach = database.prepare("INSERT INTO agent_tools(agent_id,tool_instance_id,owner_id) VALUES(?,?,?)");
       for (const toolId of ids) attach.run(id, toolId, ownerId);
-      database.exec("COMMIT");
-    } catch (error) { database.exec("ROLLBACK"); throw error; }
+      if (transaction) database.exec("COMMIT");
+    } catch (error) { if (transaction) database.exec("ROLLBACK"); throw error; }
     return get(ownerId, id);
   }
   return {

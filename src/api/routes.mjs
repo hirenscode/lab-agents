@@ -87,6 +87,26 @@ export function installApi(app, services, config, now) {
     });
 
     route("GET", "/agents", (_req, _reply, { agents, user }) => agents.list(user.id));
+    route("POST", "/presets/duplicate-finder", (req, reply, { database, user, tools, agents }) => {
+      const scope = req.body?.scope;
+      const scanner = tools.instance({ type: "dup_finder", scope, permission: "read", name: "Scan duplicates" });
+      const mover = tools.instance({ type: "file_mover", scope: { ...scope, requireDuplicate: true }, permission: "propose", name: "Propose quarantine" });
+      const add = database.prepare("INSERT INTO tool_instances(owner_id,type,name,scope_json,permission,created_at) VALUES(?,?,?,?,?,?)");
+      database.exec("BEGIN IMMEDIATE");
+      let agent;
+      try {
+        const toolIds = [scanner, mover].map((tool) => Number(add
+          .run(user.id, tool.type, tool.name, JSON.stringify(tool.scope), tool.permission, now().toISOString()).lastInsertRowid));
+        agent = agents.save(user.id, {
+          name: req.body?.name ?? "Dupe Hunter",
+          description: "Finds byte-identical files and proposes moves to quarantine.",
+          task: "Scan for byte-identical files. Say which copy should stay and why. Propose moves only for confirmed duplicates you can name, one file per approval. Keep at least one copy of every group.",
+          toolIds,
+        }, undefined, { transaction: false });
+        database.exec("COMMIT");
+      } catch (error) { database.exec("ROLLBACK"); throw error; }
+      return reply.code(201).send(agent);
+    });
     route("POST", "/agents", (req, reply, { agents, user }) => reply.code(201).send(agents.save(user.id, req.body)));
     route("GET", "/agents/:id", (req, _reply, { agents, user }) => agents.get(user.id, identifier(req.params.id)));
     route("PUT", "/agents/:id", (req, _reply, { agents, user }) => agents.save(user.id, req.body, identifier(req.params.id)));
@@ -123,6 +143,8 @@ export function installApi(app, services, config, now) {
     route("GET", "/runs/:id/events", (req, _reply, { engine, user }) => engine.events(user.id, identifier(req.params.id)));
     route("POST", "/runs/:id/approvals/:approvalId", (req, _reply, { engine, user }) =>
       engine.decide(user.id, identifier(req.params.id), identifier(req.params.approvalId), req.body?.decision));
+    route("POST", "/runs/:id/approvals/:approvalId/restore", (req, _reply, { engine, user }) =>
+      engine.restore(user.id, identifier(req.params.id), identifier(req.params.approvalId)));
     route("GET", "/runs/:id/stream", async (req, reply, { engine, user }) => {
       const id = identifier(req.params.id);
       engine.get(user.id, id);

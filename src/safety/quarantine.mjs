@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import {
-  closeSync, constants, lstatSync, mkdirSync, openSync, readFileSync, realpathSync,
+  closeSync, constants, linkSync, lstatSync, mkdirSync, openSync, readFileSync, realpathSync,
   renameSync, unlinkSync, writeFileSync,
 } from "node:fs";
 import { basename, dirname, join, relative } from "node:path";
@@ -99,14 +99,15 @@ function writeManifest(path, manifest) {
 function ensureAudit(database, event, now) {
   const previous = database.prepare(`
     SELECT 1 FROM audit_log
-    WHERE user_id = ? AND action = 'quarantine_move'
+    WHERE user_id = ? AND action = ?
       AND json_extract(detail_json, '$.approvalId') = ?
       AND json_extract(detail_json, '$.runId') = ?
-  `).get(event.userId, event.approvalId, event.runId);
+  `).get(event.userId, event.action, event.approvalId, event.runId);
   if (!previous) recordAudit(database, event, now);
 }
 
 function moveInEntry({ database, pathGuard, scope, proposal, event, now, signal, mountPath }, entry) {
+  if (lstatSync(join(entry, "restored.json"), { throwIfNoEntry: false })) throw denied("The approved file was already restored");
   const payload = join(entry, "file");
   const manifestPath = join(entry, "manifest.json");
   const manifestInfo = lstatSync(manifestPath, { throwIfNoEntry: false });
@@ -127,6 +128,14 @@ function moveInEntry({ database, pathGuard, scope, proposal, event, now, signal,
     return;
   }
 
+  if (scope.requireDuplicate || proposal.keep) {
+    const kept = pathGuard.resolve(scope, proposal.keep?.path, { signal });
+    const keptFile = identity(lstatSync(kept.path, { bigint: true }));
+    if (kept.path !== kept.requestedPath || kept.path === join(mountPath, proposal.source) ||
+        !matches(keptFile, proposal.keep?.file)) {
+      throw denied("The duplicate chosen to stay has changed");
+    }
+  }
   const target = resolveFile(pathGuard, scope, proposal.path, signal);
   if (target.mountPath !== mountPath || relative(mountPath, target.path) !== proposal.source) {
     throw denied("The approved file location changed");
@@ -187,6 +196,74 @@ export function moveToQuarantine({
     });
     database.exec("COMMIT");
     return { entryId, path: join(mountPath, QUARANTINE_DIR, entryId, "file") };
+  } catch (error) {
+    database.exec("ROLLBACK");
+    throw error;
+  }
+}
+
+export function restoreFromQuarantine({ database, pathGuard, approvalId, userId, now = () => new Date() }) {
+  if (![approvalId, userId].every((id) => Number.isSafeInteger(id) && id > 0)) {
+    throw denied("Restore requires the original approval and its owner");
+  }
+
+  database.exec("BEGIN IMMEDIATE");
+  try {
+    const row = approvedRow(database, approvalId, userId);
+    const proposal = JSON.parse(row.proposal);
+    if (proposal?.kind !== "quarantine" || typeof proposal.entryId !== "string" ||
+        !/^[\da-f]{8}-[\da-f]{4}-4[\da-f]{3}-[89ab][\da-f]{3}-[\da-f]{12}$/.test(proposal.entryId) ||
+        typeof proposal.path !== "string") throw denied("The approval does not contain a quarantined file");
+
+    const parent = dirname(proposal.path);
+    const target = pathGuard.resolve(proposal.scope, parent === "." ? "" : parent, { access: "write" });
+    const name = basename(proposal.path);
+    if (!name || name === ".." || name === "." || target.path !== target.requestedPath ||
+        relative(target.mountPath, join(target.path, name)) !== proposal.source) throw denied("The approved file location changed");
+
+    const event = { action: "quarantine_restore", userId, runId: row.runId, approvalId };
+    const directory = join(target.mountPath, QUARANTINE_DIR, proposal.entryId);
+    withDirectory(directory, directory, (entry) => {
+      const manifestPath = join(entry, "manifest.json");
+      if (!lstatSync(manifestPath).isFile()) throw denied("Invalid quarantine manifest");
+      const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+      if (!matches({ userId, runId: row.runId, approvalId }, manifest) ||
+          JSON.stringify(manifest.proposal) !== JSON.stringify(proposal)) throw denied("Quarantine manifest differs from approval");
+
+      const payload = join(entry, "file");
+      const marker = join(entry, "restored.json");
+      const info = lstatSync(payload, { bigint: true, throwIfNoEntry: false });
+      const restored = lstatSync(marker, { throwIfNoEntry: false })?.isFile();
+      if (!info && restored) { ensureAudit(database, event, now); return; }
+      if (!info || !matches(identity(info), proposal.file, ["device", "inode", "size", "modified"])) {
+        throw denied("Quarantine payload does not match its manifest");
+      }
+
+      withDirectory(target.path, target.path, (folder) => {
+        const original = join(folder, name);
+        const existing = lstatSync(original, { bigint: true, throwIfNoEntry: false });
+        if (existing && (!existing.isFile() || !matches(identity(existing), proposal.file, ["device", "inode"]))) {
+          throw new SafetyError("file_conflict", "Restore stopped because the original path is occupied");
+        }
+        // Linking creates the original name only if it is free. The quarantined
+        // data remains intact until the original name and receipt both exist.
+        if (!existing) {
+          try { linkSync(payload, original); }
+          catch (error) {
+            if (error.code === "EEXIST") throw new SafetyError("file_conflict", "Restore stopped because the original path is occupied");
+            throw error;
+          }
+        }
+        if (!restored) writeManifest(marker, { ...event, restoredAt: now().toISOString() });
+        if (!matches(identity(lstatSync(original, { bigint: true })), proposal.file, ["device", "inode"])) {
+          throw denied("The restore location changed");
+        }
+        ensureAudit(database, event, now);
+        unlinkSync(payload);
+      });
+    });
+    database.exec("COMMIT");
+    return { restored: true, path: proposal.path };
   } catch (error) {
     database.exec("ROLLBACK");
     throw error;

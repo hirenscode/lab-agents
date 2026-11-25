@@ -27,7 +27,12 @@ export async function* walkFiles(pathGuard, scope, signal) {
   while (directories.length) {
     signal?.throwIfAborted();
     const folder = directories.pop();
-    const { path, requestedPath } = pathGuard.resolve(scope, folder, { signal });
+    let resolved;
+    try { resolved = pathGuard.resolve(scope, folder, { signal }); } catch (error) {
+      if (!folder || signal?.aborted || error.code !== "path_denied") throw error;
+      continue;
+    }
+    const { path, requestedPath } = resolved;
     if (path !== requestedPath) continue;
     const directory = await opendir(path);
     for await (const entry of directory) {
@@ -42,7 +47,7 @@ export async function* walkFiles(pathGuard, scope, signal) {
         const info = await lstat(target.path, { bigint: true });
         if (info.isFile()) yield { path: relative, info };
       } catch (error) {
-        if (signal?.aborted || !["ENOENT", "ENOTDIR"].includes(error.cause?.code ?? error.code)) throw error;
+        if (signal?.aborted || !["ENOENT", "ENOTDIR", "path_denied"].includes(error.cause?.code ?? error.code)) throw error;
       }
     }
   }

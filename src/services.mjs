@@ -9,6 +9,8 @@ import { createPathGuard } from "./safety/path-guard.mjs";
 import { createToolRegistry } from "./tools/registry.mjs";
 import { createTriggerService } from "./triggers/service.mjs";
 import { createPersonalityFiles } from "./personality/files.mjs";
+import { join } from "node:path";
+import { createDuplicateWorker } from "./duplicates/process.mjs";
 
 function inside(root, path) {
   const offset = relative(root, path);
@@ -29,7 +31,8 @@ export function openServices(database, config, { now, brainClientFactory }) {
   assertDataIsolation(config.mounts, config.dataDir);
   const pathGuard = createPathGuard(config.mounts);
   const personality = createPersonalityFiles(config.dataDir, { now });
-  const tools = createToolRegistry({ pathGuard, dataDir: config.dataDir, now, personality });
+  const duplicateScan = createDuplicateWorker(join(config.dataDir, "lab-agents.sqlite"), config.mounts);
+  const tools = createToolRegistry({ pathGuard, dataDir: config.dataDir, now, personality, duplicateScan });
   const brains = createBrainRegistry(database, { clientFactory: brainClientFactory, now });
   const sessions = createSessions(database, {
     dsm: createDsmAuth(config.dsmUrl), adminUsers: config.adminUsers, secure: config.secureCookies, now,

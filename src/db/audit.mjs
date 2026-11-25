@@ -22,6 +22,7 @@ export function recordAudit(database, event, now = () => new Date()) {
       }
       detail.decision = event.decision;
       break;
+    case "quarantine_restore":
     case "quarantine_move":
       detail.approvalId = id(event.approvalId);
       break;

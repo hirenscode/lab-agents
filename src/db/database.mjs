@@ -7,6 +7,7 @@ const migrations = [
   new URL("./migrations/002-run-checkpoints.sql", import.meta.url),
   new URL("./migrations/003-auth.sql", import.meta.url),
   new URL("./migrations/004-triggers.sql", import.meta.url),
+  new URL("./migrations/005-duplicate-hashes.sql", import.meta.url),
 ];
 export const SCHEMA_VERSION = migrations.length;
 

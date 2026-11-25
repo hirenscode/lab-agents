@@ -1,6 +1,6 @@
 import { recordAudit } from "../db/audit.mjs";
 import { SafetyError } from "../errors.mjs";
-import { moveToQuarantine } from "../safety/quarantine.mjs";
+import { moveToQuarantine, restoreFromQuarantine } from "../safety/quarantine.mjs";
 import { assertToolMix } from "../tools/registry.mjs";
 import { energySettings, trimMessages } from "./energy.mjs";
 
@@ -243,7 +243,12 @@ export function createRunEngine(database, {
     if (!row || row.owner_id !== userId) reject("not_found", "Run was not found");
     const { resume_json, tokens_json, ...visible } = row;
     return { ...visible, tokens: JSON.parse(tokens_json), queuePosition: queuePosition(id),
-      approvals: database.prepare("SELECT id,status,proposal_json,decided_at FROM approvals WHERE run_id=? ORDER BY id").all(id)
+      approvals: database.prepare(`
+        SELECT a.id,a.status,a.proposal_json,a.decided_at,EXISTS(
+          SELECT 1 FROM audit_log l WHERE l.user_id=? AND l.action='quarantine_restore'
+            AND json_extract(l.detail_json,'$.approvalId')=a.id
+        ) AS restored FROM approvals a WHERE a.run_id=? ORDER BY a.id
+      `).all(userId, id)
         .map(({ proposal_json, ...approval }) => ({ ...approval, proposal: JSON.parse(proposal_json) })),
     };
   }
@@ -331,6 +336,13 @@ export function createRunEngine(database, {
       if (previous) void previous.then(() => kick(runId));
       else kick(runId);
       return get(userId, runId);
+    },
+    restore(userId, id, approvalId) {
+      const run = get(userId, id);
+      if (!run.approvals.some((approval) => approval.id === approvalId && approval.status === "approved")) {
+        reject("not_found", "Approved move was not found");
+      }
+      return restoreFromQuarantine({ database, pathGuard, approvalId, userId, now });
     },
     events(userId, id, after = 0) {
       get(userId, id);

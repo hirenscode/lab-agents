@@ -8,7 +8,7 @@ import { test } from "node:test";
 import { recordAudit } from "../src/db/audit.mjs";
 import { openDatabase } from "../src/db/database.mjs";
 import { createPathGuard, QUARANTINE_DIR } from "../src/safety/path-guard.mjs";
-import { moveToQuarantine, prepareQuarantineProposal } from "../src/safety/quarantine.mjs";
+import { moveToQuarantine, prepareQuarantineProposal, restoreFromQuarantine } from "../src/safety/quarantine.mjs";
 import { fakeClock } from "../test-support/fake-clock.mjs";
 
 const denied = { code: "quarantine_denied" };
@@ -162,4 +162,21 @@ test("quarantine refuses a preexisting directory with group access", (t) => {
   assert.throws(() => moveToQuarantine(args), denied);
   assert.equal(readFileSync(source, "utf8"), "original data");
   assert.deepEqual(audit(), []);
+});
+
+test("restore refuses an occupied source and otherwise returns the file with one audit record", (t) => {
+  const { args, approve, source, audit } = fixture(t);
+  approve();
+  const receipt = moveToQuarantine(args);
+  writeFileSync(source, "keep this");
+  assert.throws(() => restoreFromQuarantine(args), { code: "file_conflict" });
+  assert.equal(readFileSync(source, "utf8"), "keep this");
+  assert.equal(readFileSync(receipt.path, "utf8"), "original data");
+  rmSync(source);
+  assert.deepEqual(restoreFromQuarantine(args), { restored: true, path: "report.txt" });
+  assert.equal(readFileSync(source, "utf8"), "original data");
+  assert.ok(!existsSync(receipt.path));
+  restoreFromQuarantine(args);
+  assert.deepEqual(audit().map(({ action }) => action), ["quarantine_move", "quarantine_restore"]);
+  assert.throws(() => moveToQuarantine(args), denied);
 });

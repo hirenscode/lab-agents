@@ -4,6 +4,7 @@ import { assertPermission } from "../safety/permissions.mjs";
 import { prepareQuarantineProposal } from "../safety/quarantine.mjs";
 import { createUrlGuard, normalizeAllowedDomains } from "../safety/url-guard.mjs";
 import { openScopedFile, scanCandidates } from "./files.mjs";
+import { verifyDuplicatePair } from "../duplicates/scan.mjs";
 
 const string = { type: "string", minLength: 1 };
 const object = (properties = {}, required = Object.keys(properties)) => ({
@@ -11,6 +12,7 @@ const object = (properties = {}, required = Object.keys(properties)) => ({
 });
 const mountScope = object({ mountId: string, folder: { type: "string" } }, ["mountId"]);
 const fileArg = object({ path: string });
+const moverScope = object({ ...mountScope.properties, requireDuplicate: { type: "boolean" } }, ["mountId"]);
 const fileDescription = (scope) => `${scope.mountId}/${scope.folder || ""}`;
 
 function invalid(message) {
@@ -18,6 +20,7 @@ function invalid(message) {
 }
 
 function validate(value, schema) {
+  if (schema.type === "boolean") return typeof value === "boolean";
   if (schema.type === "string") {
     return typeof value === "string" && value.length >= (schema.minLength ?? 0) && value.length <= 4096;
   }
@@ -82,16 +85,21 @@ export function createToolRegistry({ pathGuard, dataDir, fetchAllowed = createUr
     },
     {
       id: "dup_finder", permission: "read", scopeSchema: mountScope, argsSchema: object(),
-      describe: (scope) => `Scan ${fileDescription(scope)} for duplicate candidates. Reports progress and never moves files.`,
+      describe: (scope) => `Scan ${fileDescription(scope)} for byte-identical files. Reports progress and never moves files.`,
       run(_args, { scope, emit }, signal) {
         return duplicateScan({ pathGuard, scope, emit, signal });
       },
     },
     {
-      id: "file_mover", permission: "propose", scopeSchema: mountScope, argsSchema: fileArg,
-      describe: (scope) => `Propose moving a file inside ${fileDescription(scope)} to quarantine. The owner must approve the move.`,
-      run({ path }, { scope }, signal) {
-        return { proposal: prepareQuarantineProposal({ pathGuard, scope, path, permission: "propose", signal }) };
+      id: "file_mover", permission: "propose", scopeSchema: moverScope, argsSchema: object({ path: string, keepPath: string }, ["path"]),
+      describe: (scope) => `Propose moving a file inside ${fileDescription(scope)} to quarantine. The owner must approve the move.` +
+        (scope.requireDuplicate ? " Choose a different keepPath for the byte-identical file that should stay." : ""),
+      async run({ path, keepPath }, { scope }, signal) {
+        const proof = scope.requireDuplicate ? await verifyDuplicatePair(pathGuard, scope, path, keepPath, signal) : null;
+        const proposal = prepareQuarantineProposal({ pathGuard, scope, path, permission: "propose", signal });
+        if (proof && JSON.stringify(proposal.file) !== JSON.stringify(proof.file)) throw invalid("The duplicate changed");
+        if (proof) proposal.keep = proof.keep;
+        return { proposal };
       },
     },
     {
@@ -121,7 +129,7 @@ export function createToolRegistry({ pathGuard, dataDir, fetchAllowed = createUr
     }
     assertPermission(permission, type.permission);
     const normalized = { ...scope };
-    if (type.scopeSchema === mountScope) {
+    if (type.scopeSchema === mountScope || type.scopeSchema === moverScope) {
       normalized.folder ??= "";
       pathGuard.resolve(normalized, "", { access: type.permission === "propose" ? "write" : "read" });
     }
@@ -139,7 +147,7 @@ export function createToolRegistry({ pathGuard, dataDir, fetchAllowed = createUr
       } };
     },
     async run(config, args, ctx = {}, callerSignal) {
-      const timeout = AbortSignal.timeout(60_000);
+      const timeout = AbortSignal.timeout(config?.type === "dup_finder" ? 600_000 : 60_000);
       const signal = callerSignal ? AbortSignal.any([timeout, callerSignal]) : timeout;
       signal.throwIfAborted();
       const saved = instance(config);

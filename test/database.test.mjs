@@ -31,7 +31,7 @@ test("migration creates the data layout and survives restart without reapplying"
   const database = openDatabase(path, clock.now);
   try {
     assert.deepEqual(tables(database), [
-      "agent_tools", "agents", "approvals", "audit_log", "brains", "local_admins", "run_events",
+      "agent_tools", "agents", "approvals", "audit_log", "brains", "duplicate_hashes", "local_admins", "run_events",
       "runs", "schema_version", "sessions", "tool_instances", "triggers", "users",
     ]);
     database.prepare("INSERT INTO users (dsm_username, role, created_at) VALUES (?, ?, ?)")
