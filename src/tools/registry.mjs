@@ -32,7 +32,7 @@ function validate(value, schema) {
 }
 
 export function createToolRegistry({ pathGuard, dataDir, fetchAllowed = createUrlGuard(), now = () => new Date(),
-  duplicateScan = scanCandidates } = {}) {
+  duplicateScan = scanCandidates, personality } = {}) {
   const types = [
     {
       id: "datetime", permission: "read", scopeSchema: object(), argsSchema: object({ timeZone: string }, []),
@@ -94,6 +94,23 @@ export function createToolRegistry({ pathGuard, dataDir, fetchAllowed = createUr
         return { proposal: prepareQuarantineProposal({ pathGuard, scope, path, permission: "propose", signal }) };
       },
     },
+    {
+      id: "history_search", permission: "read", scopeSchema: object(), argsSchema: object({ query: string }),
+      describe: () => "Find recent entries from this agent's read-only run history.",
+      run({ query }, { agentId }) {
+        if (!personality || !agentId) throw invalid("Agent history is unavailable");
+        return { entries: personality.history({ id: agentId }, query) };
+      },
+    },
+    {
+      id: "personality_proposal", permission: "propose", scopeSchema: object(),
+      argsSchema: object({ file: string, content: string }),
+      describe: () => "Propose a change to soul, avatar, energy, memory, or learning for the owner's approval.",
+      run({ file, content }, { agentId, webDerived }) {
+        if (!personality || !agentId) throw invalid("Agent files are unavailable");
+        return { proposal: personality.propose({ id: agentId }, file, content, webDerived ? "web" : "agent") };
+      },
+    },
   ].map((type) => Object.freeze({ version: 1, ...type }));
   const byId = new Map(types.map((type) => [type.id, type]));
 
@@ -138,7 +155,7 @@ export function createToolRegistry({ pathGuard, dataDir, fetchAllowed = createUr
 export function assertToolMix(instances) {
   if (instances.length > 8) throw invalid("An agent can use at most eight tools");
   if (instances.some(({ type }) => type === "web_fetch")
-      && instances.some(({ permission }) => permission !== "read")) {
+      && instances.some(({ permission, type }) => permission !== "read" && type !== "personality_proposal")) {
     throw invalid("An agent cannot combine web access with file-changing tools");
   }
 }

@@ -6,7 +6,7 @@ import { createAgentStore, identifier } from "./agents.mjs";
 const failures = {
   unauthorized: 401, bad_credentials: 401, otp_required: 401, otp_wrong: 401, otp_enforced: 401,
   account_disabled: 403, account_denied: 403, ip_blocked: 403, csrf_denied: 403, forbidden: 403, local_denied: 403,
-  dsm_unavailable: 503, rate_limited: 429, not_found: 404, in_use: 409,
+  dsm_unavailable: 503, rate_limited: 429, not_found: 404, in_use: 409, file_conflict: 409, permission_denied: 403,
 };
 
 export function installApi(app, services, config, now) {
@@ -94,6 +94,16 @@ export function installApi(app, services, config, now) {
       agents.archive(user.id, identifier(req.params.id));
       return reply.code(204).send();
     });
+    route("GET", "/agents/:id/files", (req, _reply, { agents, user, personality }) =>
+      personality.list(agents.get(user.id, identifier(req.params.id))));
+    route("GET", "/agents/:id/files/:name", (req, _reply, { agents, user, personality }) =>
+      personality.get(agents.get(user.id, identifier(req.params.id)), req.params.name));
+    route("PUT", "/agents/:id/files/:name", (req, _reply, { agents, user, personality }) =>
+      personality.write(agents.get(user.id, identifier(req.params.id)), req.params.name, req.body?.content, req.body?.revision));
+    route("GET", "/agents/:id/files/:name/versions", (req, _reply, { agents, user, personality }) =>
+      personality.versions(agents.get(user.id, identifier(req.params.id)), req.params.name));
+    route("POST", "/agents/:id/files/:name/revert", (req, _reply, { agents, user, personality }) =>
+      personality.revert(agents.get(user.id, identifier(req.params.id)), req.params.name, req.body?.version, req.body?.revision));
     route("GET", "/agents/:id/triggers", (req, _reply, { triggers, user }) =>
       triggers.list(user.id, identifier(req.params.id)));
     route("POST", "/agents/:id/triggers", (req, reply, { triggers, user }) =>

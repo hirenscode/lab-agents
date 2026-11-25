@@ -105,6 +105,7 @@ export function createRunEngine(database, {
         try {
           const args = typeof call.arguments === "string" ? JSON.parse(call.arguments) : call.arguments;
           result = await tools.run(config, args, { runId, userId: agent.owner_id, agentId: agent.id,
+            webDerived: checkpoint.webDerived === true,
             emit: (progress) => { signal.throwIfAborted(); event(runId, "progress", progress); },
           }, signal);
         } catch {
@@ -112,6 +113,7 @@ export function createRunEngine(database, {
         }
       }
       signal.throwIfAborted();
+      if (config?.type === "web_fetch" && result?.source === "web") checkpoint.webDerived = true;
       checkpoint.elapsedMs = elapsed();
       checkpoint.callIndex++;
       if (result?.proposal) {
@@ -142,7 +144,8 @@ export function createRunEngine(database, {
     assertToolMix(agent.tools);
     agent.energy = energySettings(personality?.energy?.(agent) ?? agent.config.energy);
     agent.definitions = agent.tools.map((config) => tools.definition(config));
-    const stored = JSON.parse(row.resume_json);
+    const stored = personality?.restore?.(row) ?? JSON.parse(row.resume_json);
+    agent.task = row.task;
     const checkpoint = stored.messages ? stored : {
       steps: 0, tokens: { prompt: 0, output: 0 }, elapsedMs: 0, callIndex: 0, toolResults: [],
       messages: [
@@ -310,7 +313,10 @@ export function createRunEngine(database, {
           const config = agent.tools.find((tool) => tool.id === approval.proposal.toolInstanceId && tool.type === "file_mover");
           if (!config) reject("invalid_approval", "The tool scope is no longer available");
           moveToQuarantine({ database, pathGuard, scope: config.scope, permission: config.permission, approvalId, userId, now });
-        } else if (personality?.applyProposal) {
+        } else if (approval.proposal.kind === "personality" && personality?.applyProposal) {
+          if (!agent.tools.some((tool) => tool.id === approval.proposal.toolInstanceId && tool.type === "personality_proposal")) {
+            reject("invalid_approval", "The proposal tool is no longer attached");
+          }
           personality.applyProposal(agent, approval.proposal, approvalId);
         } else {
           reject("invalid_approval", "Proposal type is unavailable");

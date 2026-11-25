@@ -28,9 +28,9 @@ function fixture(t) {
   return { registry, dataDir, fs, tool, web };
 }
 
-test("tool registry exposes all six versioned types and validates scopes and arguments", async (t) => {
+test("tool registry exposes versioned types and validates scopes and arguments", async (t) => {
   const { registry, fs, tool } = fixture(t);
-  assert.deepEqual(registry.list().map(({ id }) => id), ["datetime", "disk_status", "file_reader", "web_fetch", "dup_finder", "file_mover"]);
+  assert.deepEqual(registry.list().map(({ id }) => id), ["datetime", "disk_status", "file_reader", "web_fetch", "dup_finder", "file_mover", "history_search", "personality_proposal"]);
   assert.ok(registry.list().every(({ version }) => version === 1));
   assert.throws(() => registry.instance(tool("unknown")));
   assert.throws(() => registry.instance(tool("file_reader", { ...fs, folder: "../" })));

@@ -8,6 +8,7 @@ import { createRunEngine } from "./runs/engine.mjs";
 import { createPathGuard } from "./safety/path-guard.mjs";
 import { createToolRegistry } from "./tools/registry.mjs";
 import { createTriggerService } from "./triggers/service.mjs";
+import { createPersonalityFiles } from "./personality/files.mjs";
 
 function inside(root, path) {
   const offset = relative(root, path);
@@ -27,12 +28,13 @@ function assertDataIsolation(mounts, directory) {
 export function openServices(database, config, { now, brainClientFactory }) {
   assertDataIsolation(config.mounts, config.dataDir);
   const pathGuard = createPathGuard(config.mounts);
-  const tools = createToolRegistry({ pathGuard, dataDir: config.dataDir, now });
+  const personality = createPersonalityFiles(config.dataDir, { now });
+  const tools = createToolRegistry({ pathGuard, dataDir: config.dataDir, now, personality });
   const brains = createBrainRegistry(database, { clientFactory: brainClientFactory, now });
   const sessions = createSessions(database, {
     dsm: createDsmAuth(config.dsmUrl), adminUsers: config.adminUsers, secure: config.secureCookies, now,
   });
-  const engine = createRunEngine(database, { pathGuard, tools, brains, now });
+  const engine = createRunEngine(database, { pathGuard, tools, brains, now, personality });
   const triggers = createTriggerService(database, {
     engine, pathGuard, now,
     available: (agent) => brains.list().some((brain) => brain.enabled && brain.online && brain.models.length &&
@@ -42,7 +44,7 @@ export function openServices(database, config, { now, brainClientFactory }) {
   triggers.start();
   brains.start(async () => { engine.resumeWaiting(); await triggers.tick(); });
   return {
-    database, pathGuard, tools, brains, sessions, engine, triggers,
+    database, pathGuard, tools, brains, sessions, engine, triggers, personality,
     async close() { await Promise.all([triggers.close(), brains.close(), engine.close()]); },
   };
 }
