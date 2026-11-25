@@ -9,5 +9,10 @@ services:
       - /volume1/docker/lab-agents:/data # change if your Docker share is elsewhere
     user: "${PUID:-1000}:${PGID:-1000}"  # a NAS user that can write to the folder above
     environment:
-      - NODE_ENV=production
+      NODE_ENV: production
+      DSM_URL: ${DSM_URL:-}
+      DSM_ADMIN_USERS: ${DSM_ADMIN_USERS:-}
+      SECURE_COOKIES: ${SECURE_COOKIES:-false}
+      LAB_AGENTS_MOUNTS: ${LAB_AGENTS_MOUNTS:-[]}
+      OLLAMA_DISCOVERY_CIDR: ${OLLAMA_DISCOVERY_CIDR:-}
     restart: unless-stopped

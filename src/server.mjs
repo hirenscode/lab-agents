@@ -2,6 +2,8 @@ import Fastify from "fastify";
 import { fileURLToPath } from "node:url";
 import { loadConfig } from "./config.mjs";
 import { openDatabase } from "./db/database.mjs";
+import { installApi } from "./api/routes.mjs";
+import { openServices } from "./services.mjs";
 import { dataDirWritable, initializeDataDirectory } from "./storage.mjs";
 
 const page = (version, writable) => {
@@ -14,17 +16,20 @@ const page = (version, writable) => {
 <p class="${writable ? "ok" : "bad"}">Data folder: ${writable ? "writable" : "NOT writable (check the PUID/PGID settings)"}</p></body></html>`;
 };
 
-export function buildServer({ config = loadConfig(), now = () => new Date() } = {}) {
+export function buildServer({ config = loadConfig(), now = () => new Date(), brainClientFactory } = {}) {
   const app = Fastify({ logger: config.nodeEnv !== "test" });
   let database;
+  let services;
+  installApi(app, () => services, config, now);
 
   app.addHook("onReady", async () => {
     const databasePath = initializeDataDirectory(config.dataDir);
     database = openDatabase(databasePath, now);
+    services = openServices(database, config, { now, brainClientFactory });
   });
 
   app.addHook("onClose", async () => {
-    database?.close();
+    try { await services?.close(); } finally { database?.close(); }
   });
 
   app.get("/healthz", async (_request, reply) => {

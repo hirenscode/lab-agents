@@ -27,5 +27,23 @@ export function loadConfig(env = process.env) {
     throw new ConfigError("APP_VERSION must be a single line of text");
   }
 
-  return { name, version: appVersion, nodeEnv, port: Number(port), dataDir: resolve(dataDir) };
+  let mounts;
+  try {
+    mounts = JSON.parse(env.LAB_AGENTS_MOUNTS || "[]");
+    if (!Array.isArray(mounts) || mounts.length > 20 || mounts.some((mount) => !mount || typeof mount !== "object")) {
+      throw new Error("Invalid mounts");
+    }
+  } catch {
+    throw new ConfigError("LAB_AGENTS_MOUNTS must be a JSON array of mount records");
+  }
+  if (env.SECURE_COOKIES && !["true", "false"].includes(env.SECURE_COOKIES)) {
+    throw new ConfigError("SECURE_COOKIES must be true or false");
+  }
+  return {
+    name, version: appVersion, nodeEnv, port: Number(port), dataDir: resolve(dataDir), mounts,
+    dsmUrl: env.DSM_URL || "",
+    adminUsers: (env.DSM_ADMIN_USERS || "").split(",").map((name) => name.trim()).filter(Boolean),
+    secureCookies: env.SECURE_COOKIES === "true",
+    discoveryCidr: env.OLLAMA_DISCOVERY_CIDR || "",
+  };
 }
