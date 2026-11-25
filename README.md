@@ -39,7 +39,7 @@ sudo chown YOUR_NAS_USER /volume1/docker/lab-agents
 - The image is built for `linux/amd64` (your DS920+). To run it on your Apple Silicon Mac, build locally with `docker build -t lab-agents .`.
 - GHCR image names must be lowercase. If your GitHub org has capital letters, use the lowercase form in `docker-compose.yml`.
 - Update the NAS: tag a new version (`v0.1.1`), set `TAG` in `.env`, then rebuild the project.
-- Local dev: `npm install && npm run dev`, tests: `npm test`.
+- Local dev uses Node 22.13 or later. Run `npm ci` then `npm run dev`, or run `npm test` to check the foundation. See [Phase 1](docs/phase-1.md) for storage and verification details.
 
 ## Decisions so far
 - **Login (Phase 2):** DSM accounts through DSM's login API, behind a swappable auth interface, with a local SQLite admin as a fallback. Needs a plan for 2-step verification.
